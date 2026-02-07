@@ -1,0 +1,7 @@
+[workspace]
+members = [
+    "flash-server",
+    "flash-client",
+    "flash-common",
+]
+resolver = "2"
