@@ -1,30 +1,27 @@
 use flash_client::Client;
+use flash_common::logging::{init_tracing, shutdown_tracing};
 use tokio::io::{self, AsyncBufReadExt, BufReader};
-use tracing_subscriber::EnvFilter;
-use tracing_subscriber::filter::LevelFilter;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let filter = EnvFilter::builder()
-        .with_default_directive(LevelFilter::INFO.into())
-        .from_env()
-        .map_err(|error| anyhow::anyhow!("invalid RUST_LOG filter: {error}"))?;
-
-    tracing_subscriber::fmt()
-        .with_env_filter(filter)
-        .try_init()
-        .map_err(|error| anyhow::anyhow!("failed to initialize tracing subscriber: {error}"))?;
+    let logger_provider = init_tracing("flash-client-producer")?;
 
     let mut client = Client::connect("127.0.0.1:8080").await?;
     println!("Connected to Flash server");
-    println!("Type messages to publish (Ctrl+C to exit):");
 
-    let topic = "notifications".to_string();
+    let topic = std::env::args()
+        .nth(1)
+        .unwrap_or_else(|| "notifications".to_string());
+    tracing::info!(%topic, "producer publishing to topic");
+    println!("Publishing to topic: {topic}");
+    println!("Type messages to publish (Ctrl+C to exit):");
 
     // Read from stdin
     let stdin = io::stdin();
     let mut reader = BufReader::new(stdin);
     let mut line = String::new();
+    let shutdown_signal = tokio::signal::ctrl_c();
+    tokio::pin!(shutdown_signal);
 
     loop {
         line.clear();
@@ -34,7 +31,14 @@ async fn main() -> anyhow::Result<()> {
         use std::io::Write;
         std::io::stdout().flush()?;
 
-        let bytes_read = reader.read_line(&mut line).await?;
+        let bytes_read = tokio::select! {
+            result = reader.read_line(&mut line) => result?,
+            signal = &mut shutdown_signal => {
+                signal?;
+                tracing::info!("producer shutdown requested");
+                break;
+            }
+        };
 
         if bytes_read == 0 {
             // EOF (Ctrl+D on Unix, Ctrl+Z on Windows)
@@ -70,5 +74,7 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
+    tracing::info!("producer closed");
+    shutdown_tracing(logger_provider)?;
     Ok(())
 }

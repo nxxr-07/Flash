@@ -27,7 +27,7 @@ impl Client {
                 line.clear();
                 match reader.read_line(&mut line).await {
                     Ok(0) => {
-                        debug!("server closed the connection");
+                        info!("connection closed by server");
                         break;
                     }
                     Ok(_) => {
@@ -51,7 +51,7 @@ impl Client {
     }
 
     pub async fn publish(&mut self, topic: String, payload: Vec<u8>) -> anyhow::Result<()> {
-        debug!(%topic, payload_len = payload.len(), "sending publish command");
+        info!(%topic, payload_len = payload.len(), "message produced by client");
         let cmd = Command::Publish { topic, payload };
         let bytes = serde_json::to_vec(&cmd)?;
         self.writer.write_all(&bytes).await?;
@@ -60,7 +60,7 @@ impl Client {
     }
 
     pub async fn subscribe(&mut self, topic: String) -> anyhow::Result<()> {
-        debug!(%topic, "sending subscribe command");
+        info!(%topic, "subscribing to topic");
         let cmd = Command::Subscribe { topic };
         let bytes = serde_json::to_vec(&cmd)?;
         self.writer.write_all(&bytes).await?;
@@ -72,6 +72,14 @@ impl Client {
         // Read from the background reader
         if let Some(line) = self.lines_rx.recv().await {
             match serde_json::from_str(&line) {
+                Ok(Response::Message { topic, payload }) => {
+                    info!(%topic, payload_len = payload.len(), "received message from server");
+                    Some(Response::Message { topic, payload })
+                }
+                Ok(Response::Error(error)) => {
+                    warn!(%error, "server returned an error");
+                    Some(Response::Error(error))
+                }
                 Ok(response) => Some(response),
                 Err(e) => {
                     warn!(error = %e, "received invalid response from server");
