@@ -20,14 +20,26 @@ pub enum Response {
     Message { topic: String, payload: Vec<u8> },
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
+    fn command_round_trips_through_json() {
+        let command = Command::Publish {
+            topic: "notifications".to_string(),
+            payload: b"hello".to_vec(),
+        };
+
+        let encoded = serde_json::to_string(&command).unwrap();
+        let decoded: Command = serde_json::from_str(&encoded).unwrap();
+
+        match decoded {
+            Command::Publish { topic, payload } => {
+                assert_eq!(topic, "notifications");
+                assert_eq!(payload, b"hello");
+            }
+            Command::Subscribe { .. } => panic!("decoded a different command variant"),
+        }
     }
 }

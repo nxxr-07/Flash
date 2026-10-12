@@ -45,3 +45,13 @@ Type messages to publish (Ctrl+C to exit):
 - Send **empty lines** to skip (won't publish)
 - Press **Ctrl+C** to exit
 - Messages appear instantly in all subscribed consumers
+
+## Logging
+
+The server and client examples emit structured logs through `tracing`. Set `RUST_LOG`
+to choose the verbosity, for example:
+
+```bash
+RUST_LOG=debug cargo run -p flash-server
+RUST_LOG=flash_client=debug cargo run -p flash-client --example consumer
+```
